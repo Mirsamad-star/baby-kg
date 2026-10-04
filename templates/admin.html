@@ -1,1 +1,366 @@
-{% extends 'base.html' %}{% block title %}Admin panel — Baby KG{% endblock %}{% block content %}<section class="section admin-page"><div class="admin-head"><div><span class="eyebrow">BABY KG CONTROL</span><h1>Admin panel</h1><p class="muted">Do‘konni shu yerdan boshqaring.</p></div><a class="btn light" href="{{url_for('admin_logout')}}">Chiqish</a></div><div class="stats"><div><small>Faol mahsulot</small><b>{{stats.active_products}}</b><span>saytda ko‘rinadi</span></div><div><small>Buyurtmalar</small><b>{{stats.orders}}</b><span>{{stats.new_orders}} ta yangi</span></div><div><small>Jami savdo</small><b>{{'{:,}'.format(stats.revenue).replace(',',' ')}}</b><span>so‘m</span></div><div><small>Mijozlar</small><b>{{stats.users}}</b><span>ro‘yxatdan o‘tgan</span></div><div><small>Ko‘rishlar</small><b>{{stats.views}}</b><span>mahsulot sahifalari</span></div><div><small>Fikrlar</small><b>{{stats.reviews}}</b><span>baholashlar</span></div><div><small>Sevimlilar</small><b>{{stats.wishlists}}</b><span>❤️ saqlashlar</span></div><div><small>Yangi buyurtma</small><b>{{stats.new_orders}}</b><span>tezda ko‘rib chiqing</span></div></div><div class="admin-grid"><div><div class="panel"><h2>＋ Yangi mahsulot</h2><p class="muted">Bitta mahsulotga 1–5 tagacha rasm tanlang.</p><form class="form" method="post" enctype="multipart/form-data" action="{{url_for('product_add')}}"><input name="name" placeholder="Mahsulot nomi" required><select name="category">{% for c in cats[1:] %}<option>{{c}}</option>{% endfor %}</select><input type="number" name="price" placeholder="Narx" required><textarea name="description" placeholder="Batafsil tavsif" required></textarea><label class="file">📷 1–5 ta rasm tanlash<input type="file" name="image_files" accept="image/*" multiple></label><input name="image_url" placeholder="yoki asosiy rasm URL manzili"><button class="btn">Mahsulotni qo‘shish</button></form></div><div class="panel"><h2>🔥 Eng ko‘p ko‘rilganlar</h2>{% for p in top %}<div class="top-view"><b>{{loop.index}}. {{p.name}}</b><span>👁 {{p.views}}</span></div>{% else %}<p class="muted">Hali ko‘rishlar yo‘q.</p>{% endfor %}</div></div><div class="panel"><h2>Mahsulotlar</h2>{% for p in products %}<div class="admin-product"><img src="{{p.image}}" alt="{{p.name}}"><div><div class="admin-product-head"><div><b>{{p.name}}</b><small>{{p.category}} · {{'{:,}'.format(p.price).replace(',',' ')}} so‘m · 👁 {{p.views or 0}}</small></div><span class="state {{'on' if p.active else 'off'}}">{{'Faol' if p.active else 'Yashirin'}}</span></div><form method="post" enctype="multipart/form-data" action="{{url_for('product_edit',pid=p.id)}}"><input name="name" value="{{p.name}}"><select name="category">{% for c in cats[1:] %}<option {% if p.category==c %}selected{% endif %}>{{c}}</option>{% endfor %}</select><input type="number" name="price" value="{{p.price}}"><textarea name="description">{{p.description}}</textarea><label class="file compact">📷 Yangi 1–5 rasm<input type="file" name="image_files" accept="image/*" multiple></label><input name="image_url" placeholder="Yangi rasm URL (ixtiyoriy)"><button class="btn light">Saqlash</button></form><div class="admin-actions"><form method="post" action="{{url_for('toggle',pid=p.id)}}"><button class="btn {{'light' if p.active else ''}}">{{'Yashirish' if p.active else 'Ko‘rsatish'}}</button></form><form method="post" action="{{url_for('delete_product',pid=p.id)}}" onsubmit="return confirm('O‘chirishni tasdiqlaysizmi?')"><button class="danger">O‘chirish</button></form></div></div></div>{% endfor %}</div></div><div class="panel orders-admin"><h2>📦 Buyurtmalar</h2>{% for o in orders %}<div class="admin-order"><div><b>#{{o.id}} · {{o.customer_name}}</b><span>{{o.phone}} · {{o.address}}</span><small>{{o.created_at[:16].replace('T',' ')}}</small></div><b>{{'{:,}'.format(o.total).replace(',',' ')}} so‘m</b><form method="post" action="{{url_for('order_status',oid=o.id)}}"><select name="status"><option {% if o.status=='Yangi' %}selected{% endif %}>Yangi</option><option {% if o.status=='Qabul qilindi' %}selected{% endif %}>Qabul qilindi</option><option {% if o.status=='Yetkazilmoqda' %}selected{% endif %}>Yetkazilmoqda</option><option {% if o.status=='Tugallandi' %}selected{% endif %}>Tugallandi</option></select><button class="btn light">Yangilash</button></form></div>{% else %}<p>Buyurtmalar hali yo‘q.</p>{% endfor %}</div></section>{% endblock %}
+{% extends 'base.html' %}
+{% block title %}Admin panel — Baby KG{% endblock %}
+{% block content %}
+<section class="section admin-page">
+  <div class="admin-head">
+    <div>
+      <span class="eyebrow">BABY KG CONTROL</span>
+      <h1>Admin panel</h1>
+      <p class="muted">Do‘konni shu yerdan boshqaring.</p>
+    </div>
+    <a class="btn light" href="{{url_for('admin_logout')}}">Chiqish</a>
+  </div>
+
+  <div class="stats">
+    <div class="stat-card" data-modal="modal-products" title="Batafsil ko‘rish">
+      <small>Faol mahsulot</small>
+      <b>{{stats.active_products}}</b>
+      <span>saytda ko‘rinadi</span>
+    </div>
+    <div class="stat-card" data-modal="modal-orders" title="Batafsil ko‘rish">
+      <small>Buyurtmalar</small>
+      <b>{{stats.orders}}</b>
+      <span>{{stats.new_orders}} ta yangi</span>
+    </div>
+    <div class="stat-card" data-modal="modal-revenue" title="Batafsil ko‘rish">
+      <small>Jami savdo</small>
+      <b>{{'{:,}'.format(stats.revenue).replace(',',' ')}}</b>
+      <span>so‘m</span>
+    </div>
+    <div class="stat-card" data-modal="modal-users" title="Batafsil ko‘rish">
+      <small>Mijozlar</small>
+      <b>{{stats.users}}</b>
+      <span>ro‘yxatdan o‘tgan</span>
+    </div>
+    <div class="stat-card" data-modal="modal-views" title="Batafsil ko‘rish">
+      <small>Ko‘rishlar</small>
+      <b>{{stats.views}}</b>
+      <span>mahsulot sahifalari</span>
+    </div>
+    <div class="stat-card" data-modal="modal-reviews" title="Batafsil ko‘rish">
+      <small>Fikrlar</small>
+      <b>{{stats.reviews}}</b>
+      <span>baholashlar</span>
+    </div>
+    <div class="stat-card" data-modal="modal-wishlists" title="Batafsil ko‘rish">
+      <small>Sevimlilar</small>
+      <b>{{stats.wishlists}}</b>
+      <span>❤️ saqlashlar</span>
+    </div>
+    <div class="stat-card" data-modal="modal-new-orders" title="Batafsil ko‘rish">
+      <small>Yangi buyurtma</small>
+      <b>{{stats.new_orders}}</b>
+      <span>tezda ko‘rib chiqing</span>
+    </div>
+  </div>
+
+  <!-- MODALS -->
+  <div id="modal-products" class="admin-modal" hidden>
+    <div class="admin-modal-box">
+      <div class="admin-modal-head"><h3>Faol mahsulotlar</h3><button type="button" class="admin-modal-close">✕</button></div>
+      <div class="admin-modal-body">
+        {% if active_products_list %}
+        <table class="admin-table">
+          <thead><tr><th>#</th><th>Nomi</th><th>Kategoriya</th><th>Narx</th><th>Ko‘rish</th><th>Sana</th></tr></thead>
+          <tbody>
+          {% for p in active_products_list %}
+            <tr>
+              <td>{{p.id}}</td>
+              <td>{{p.name}}</td>
+              <td>{{p.category}}</td>
+              <td>{{'{:,}'.format(p.price).replace(',',' ')}} so‘m</td>
+              <td>{{p.views or 0}}</td>
+              <td>{{(p.created_at or '')[:16].replace('T',' ')}}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}<p class="muted">Faol mahsulot yo‘q.</p>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-orders" class="admin-modal" hidden>
+    <div class="admin-modal-box">
+      <div class="admin-modal-head"><h3>Barcha buyurtmalar</h3><button type="button" class="admin-modal-close">✕</button></div>
+      <div class="admin-modal-body">
+        {% if orders %}
+        <table class="admin-table">
+          <thead><tr><th>#</th><th>Mijoz</th><th>Telefon</th><th>Manzil</th><th>Summa</th><th>Status</th><th>Sana</th></tr></thead>
+          <tbody>
+          {% for o in orders %}
+            <tr>
+              <td>{{o.id}}</td>
+              <td>{{o.customer_name}}</td>
+              <td>{{o.phone}}</td>
+              <td>{{o.address}}</td>
+              <td>{{'{:,}'.format(o.total).replace(',',' ')}} so‘m</td>
+              <td>{{o.status}}</td>
+              <td>{{(o.created_at or '')[:16].replace('T',' ')}}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}<p class="muted">Buyurtmalar yo‘q.</p>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-revenue" class="admin-modal" hidden>
+    <div class="admin-modal-box">
+      <div class="admin-modal-head"><h3>Jami savdo — buyurtmalar</h3><button type="button" class="admin-modal-close">✕</button></div>
+      <div class="admin-modal-body">
+        <p style="margin-bottom:12px"><b>Jami:</b> {{'{:,}'.format(stats.revenue).replace(',',' ')}} so‘m</p>
+        {% if orders %}
+        <table class="admin-table">
+          <thead><tr><th>#</th><th>Mijoz</th><th>Telefon</th><th>Summa</th><th>Status</th><th>Sana</th></tr></thead>
+          <tbody>
+          {% for o in orders %}
+            <tr>
+              <td>{{o.id}}</td>
+              <td>{{o.customer_name}}</td>
+              <td>{{o.phone}}</td>
+              <td>{{'{:,}'.format(o.total).replace(',',' ')}} so‘m</td>
+              <td>{{o.status}}</td>
+              <td>{{(o.created_at or '')[:16].replace('T',' ')}}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}<p class="muted">Savdo yo‘q.</p>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-users" class="admin-modal" hidden>
+    <div class="admin-modal-box">
+      <div class="admin-modal-head"><h3>Ro‘yxatdan o‘tgan mijozlar</h3><button type="button" class="admin-modal-close">✕</button></div>
+      <div class="admin-modal-body">
+        {% if users_list %}
+        <table class="admin-table">
+          <thead><tr><th>#</th><th>Ismi</th><th>Telefon</th><th>Ro‘yxatdan o‘tgan</th></tr></thead>
+          <tbody>
+          {% for u in users_list %}
+            <tr>
+              <td>{{u.id}}</td>
+              <td>{{u.name}}</td>
+              <td>{{u.phone}}</td>
+              <td>{{(u.created_at or '')[:16].replace('T',' ')}}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}<p class="muted">Mijozlar yo‘q.</p>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-views" class="admin-modal" hidden>
+    <div class="admin-modal-box">
+      <div class="admin-modal-head"><h3>Mahsulot ko‘rishlari</h3><button type="button" class="admin-modal-close">✕</button></div>
+      <div class="admin-modal-body">
+        {% if views_list %}
+        <table class="admin-table">
+          <thead><tr><th>#</th><th>Mahsulot</th><th>Kategoriya</th><th>Narx</th><th>Ko‘rishlar</th></tr></thead>
+          <tbody>
+          {% for p in views_list %}
+            <tr>
+              <td>{{p.id}}</td>
+              <td>{{p.name}}</td>
+              <td>{{p.category}}</td>
+              <td>{{'{:,}'.format(p.price).replace(',',' ')}} so‘m</td>
+              <td>{{p.views}}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}<p class="muted">Ko‘rishlar yo‘q.</p>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-reviews" class="admin-modal" hidden>
+    <div class="admin-modal-box">
+      <div class="admin-modal-head"><h3>Fikrlar / baholashlar</h3><button type="button" class="admin-modal-close">✕</button></div>
+      <div class="admin-modal-body">
+        {% if reviews_list %}
+        <table class="admin-table">
+          <thead><tr><th>#</th><th>Mijoz</th><th>Telefon</th><th>Mahsulot</th><th>Baho</th><th>Fikr</th><th>Sana</th></tr></thead>
+          <tbody>
+          {% for r in reviews_list %}
+            <tr>
+              <td>{{r.id}}</td>
+              <td>{{r.user_name or '—'}}</td>
+              <td>{{r.user_phone or '—'}}</td>
+              <td>{{r.product_name or '—'}} <small>(#{{r.product_id}})</small></td>
+              <td>{{r.rating}} ★</td>
+              <td>{{r.comment or '—'}}</td>
+              <td>{{(r.created_at or '')[:16].replace('T',' ')}}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}<p class="muted">Fikrlar yo‘q.</p>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-wishlists" class="admin-modal" hidden>
+    <div class="admin-modal-box">
+      <div class="admin-modal-head"><h3>Sevimlilar (like)</h3><button type="button" class="admin-modal-close">✕</button></div>
+      <div class="admin-modal-body">
+        {% if wishlists_list %}
+        <table class="admin-table">
+          <thead><tr><th>#</th><th>Mijoz ismi</th><th>Telefon</th><th>Mahsulot</th><th>Kod</th><th>Narx</th></tr></thead>
+          <tbody>
+          {% for w in wishlists_list %}
+            <tr>
+              <td>{{w.id}}</td>
+              <td>{{w.user_name or '—'}}</td>
+              <td>{{w.user_phone or '—'}}</td>
+              <td>{{w.product_name or '—'}}</td>
+              <td>#{{w.product_id}}</td>
+              <td>{% if w.product_price %}{{'{:,}'.format(w.product_price).replace(',',' ')}} so‘m{% else %}—{% endif %}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}<p class="muted">Sevimlilar yo‘q.</p>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-new-orders" class="admin-modal" hidden>
+    <div class="admin-modal-box">
+      <div class="admin-modal-head"><h3>Yangi buyurtmalar</h3><button type="button" class="admin-modal-close">✕</button></div>
+      <div class="admin-modal-body">
+        {% if new_orders_list %}
+        <table class="admin-table">
+          <thead><tr><th>#</th><th>Mijoz</th><th>Telefon</th><th>Manzil</th><th>Summa</th><th>Sana</th></tr></thead>
+          <tbody>
+          {% for o in new_orders_list %}
+            <tr>
+              <td>{{o.id}}</td>
+              <td>{{o.customer_name}}</td>
+              <td>{{o.phone}}</td>
+              <td>{{o.address}}</td>
+              <td>{{'{:,}'.format(o.total).replace(',',' ')}} so‘m</td>
+              <td>{{(o.created_at or '')[:16].replace('T',' ')}}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}<p class="muted">Yangi buyurtma yo‘q.</p>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="admin-grid">
+    <div>
+      <div class="panel">
+        <h2>＋ Yangi mahsulot</h2>
+        <p class="muted">Bitta mahsulotga 1–5 tagacha rasm tanlang.</p>
+        <form class="form" method="post" enctype="multipart/form-data" action="{{url_for('product_add')}}">
+          <input name="name" placeholder="Mahsulot nomi" required>
+          <select name="category">{% for c in cats[1:] %}<option>{{c}}</option>{% endfor %}</select>
+          <input type="number" name="price" placeholder="Narx" required>
+          <textarea name="description" placeholder="Batafsil tavsif" required></textarea>
+          <label class="file">📷 1–5 ta rasm tanlash<input type="file" name="image_files" accept="image/*" multiple></label>
+          <input name="image_url" placeholder="yoki asosiy rasm URL manzili">
+          <button class="btn">Mahsulotni qo‘shish</button>
+        </form>
+      </div>
+      <div class="panel">
+        <h2>🔥 Eng ko‘p ko‘rilganlar</h2>
+        {% for p in top %}
+        <div class="top-view"><b>{{loop.index}}. {{p.name}}</b><span>👁 {{p.views}}</span></div>
+        {% else %}
+        <p class="muted">Hali ko‘rishlar yo‘q.</p>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Mahsulotlar</h2>
+      {% for p in products %}
+      <div class="admin-product">
+        <img src="{{p.image}}" alt="{{p.name}}">
+        <div>
+          <div class="admin-product-head">
+            <div>
+              <b>{{p.name}}</b>
+              <small>{{p.category}} · {{'{:,}'.format(p.price).replace(',',' ')}} so‘m · 👁 {{p.views or 0}}</small>
+            </div>
+            <span class="state {{'on' if p.active else 'off'}}">{{'Faol' if p.active else 'Yashirin'}}</span>
+          </div>
+          <form method="post" enctype="multipart/form-data" action="{{url_for('product_edit',pid=p.id)}}">
+            <input name="name" value="{{p.name}}">
+            <select name="category">{% for c in cats[1:] %}<option {% if p.category==c %}selected{% endif %}>{{c}}</option>{% endfor %}</select>
+            <input type="number" name="price" value="{{p.price}}">
+            <textarea name="description">{{p.description}}</textarea>
+            <label class="file compact">📷 Yangi 1–5 rasm<input type="file" name="image_files" accept="image/*" multiple></label>
+            <input name="image_url" placeholder="Yangi rasm URL (ixtiyoriy)">
+            <button class="btn light">Saqlash</button>
+          </form>
+          <div class="admin-actions">
+            <form method="post" action="{{url_for('toggle',pid=p.id)}}">
+              <button class="btn {{'light' if p.active else ''}}">{{'Yashirish' if p.active else 'Ko‘rsatish'}}</button>
+            </form>
+            <form method="post" action="{{url_for('delete_product',pid=p.id)}}" onsubmit="return confirm('O‘chirishni tasdiqlaysizmi?')">
+              <button class="danger">O‘chirish</button>
+            </form>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="panel orders-admin">
+    <h2>📦 Buyurtmalar</h2>
+    {% for o in orders %}
+    <div class="admin-order">
+      <div>
+        <b>#{{o.id}} · {{o.customer_name}}</b>
+        <span>{{o.phone}} · {{o.address}}</span>
+        <small>{{o.created_at[:16].replace('T',' ')}}</small>
+      </div>
+      <b>{{'{:,}'.format(o.total).replace(',',' ')}} so‘m</b>
+      <form method="post" action="{{url_for('order_status',oid=o.id)}}">
+        <select name="status">
+          <option {% if o.status=='Yangi' %}selected{% endif %}>Yangi</option>
+          <option {% if o.status=='Qabul qilindi' %}selected{% endif %}>Qabul qilindi</option>
+          <option {% if o.status=='Yetkazilmoqda' %}selected{% endif %}>Yetkazilmoqda</option>
+          <option {% if o.status=='Tugallandi' %}selected{% endif %}>Tugallandi</option>
+        </select>
+        <button class="btn light">Yangilash</button>
+      </form>
+    </div>
+    {% else %}
+    <p>Buyurtmalar hali yo‘q.</p>
+    {% endfor %}
+  </div>
+</section>
+
+<script>
+(function(){
+  document.querySelectorAll('.stat-card[data-modal]').forEach(function(card){
+    card.addEventListener('click', function(){
+      var id = card.getAttribute('data-modal');
+      var m = document.getElementById(id);
+      if(m){ m.hidden = false; document.body.style.overflow = 'hidden'; }
+    });
+  });
+  document.querySelectorAll('.admin-modal-close').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var m = btn.closest('.admin-modal');
+      if(m){ m.hidden = true; document.body.style.overflow = ''; }
+    });
+  });
+  document.querySelectorAll('.admin-modal').forEach(function(m){
+    m.addEventListener('click', function(e){
+      if(e.target === m){ m.hidden = true; document.body.style.overflow = ''; }
+    });
+  });
+})();
+</script>
+{% endblock %}

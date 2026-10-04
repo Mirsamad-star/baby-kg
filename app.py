@@ -1251,6 +1251,76 @@ def admin():
         """
     ).fetchall()
 
+    # Batafsil ro'yxatlar (statistika kartochkalari uchun)
+    active_products_list = c.execute(
+        """
+        SELECT id, name, category, price, views, created_at
+        FROM products
+        WHERE active = 1
+        ORDER BY id DESC
+        """
+    ).fetchall()
+
+    users_list = c.execute(
+        """
+        SELECT id, name, phone, created_at
+        FROM users
+        ORDER BY id DESC
+        """
+    ).fetchall()
+
+    views_list = c.execute(
+        """
+        SELECT id, name, category, price, views
+        FROM products
+        WHERE views > 0
+        ORDER BY views DESC, id DESC
+        """
+    ).fetchall()
+
+    reviews_list = c.execute(
+        """
+        SELECT
+            r.id,
+            r.rating,
+            r.comment,
+            r.created_at,
+            u.name AS user_name,
+            u.phone AS user_phone,
+            p.name AS product_name,
+            p.id AS product_id
+        FROM reviews r
+        LEFT JOIN users u ON u.id = r.user_id
+        LEFT JOIN products p ON p.id = r.product_id
+        ORDER BY r.id DESC
+        """
+    ).fetchall()
+
+    wishlists_list = c.execute(
+        """
+        SELECT
+            w.id,
+            u.name AS user_name,
+            u.phone AS user_phone,
+            p.name AS product_name,
+            p.id AS product_id,
+            p.price AS product_price
+        FROM wishlist w
+        LEFT JOIN users u ON u.id = w.user_id
+        LEFT JOIN products p ON p.id = w.product_id
+        ORDER BY w.id DESC
+        """
+    ).fetchall()
+
+    new_orders_list = c.execute(
+        """
+        SELECT *
+        FROM orders
+        WHERE status = 'Yangi'
+        ORDER BY id DESC
+        """
+    ).fetchall()
+
     c.close()
 
     return render_template(
@@ -1259,6 +1329,12 @@ def admin():
         orders=orders,
         stats=stats,
         top=top,
+        active_products_list=active_products_list,
+        users_list=users_list,
+        views_list=views_list,
+        reviews_list=reviews_list,
+        wishlists_list=wishlists_list,
+        new_orders_list=new_orders_list,
     )
 
 
