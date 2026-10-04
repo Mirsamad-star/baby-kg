@@ -514,74 +514,10 @@ def product(pid):
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
-    if request.method == "POST":
-        form = request.form
+    # Akkaunt yaratish o'chirilgan
+    flash("Akkaunt yaratish hozircha yopiq.", "error")
+    return redirect(url_for("login"))
 
-        name = form.get("name", "").strip()
-        phone = form.get("phone", "").strip()
-        password = form.get("password", "")
-
-        if not name or not phone or not password:
-            flash(
-                "Barcha maydonlarni to‘ldiring.",
-                "error",
-            )
-        else:
-            c = db()
-
-            try:
-                c.execute(
-                    """
-                    INSERT INTO users
-                    (
-                        name,
-                        phone,
-                        password,
-                        created_at
-                    )
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (
-                        name,
-                        phone,
-                        password,
-                        datetime.now().isoformat(),
-                    ),
-                )
-
-                c.commit()
-
-                row = c.execute(
-                    """
-                    SELECT id, name, phone
-                    FROM users
-                    WHERE phone = ?
-                    """,
-                    (phone,),
-                ).fetchone()
-
-                session["user"] = dict(row)
-
-                flash(
-                    "Xush kelibsiz!",
-                    "success",
-                )
-
-                return redirect(url_for("home"))
-
-            except sqlite3.IntegrityError:
-                flash(
-                    "Bu telefon raqami allaqachon mavjud.",
-                    "error",
-                )
-
-            finally:
-                c.close()
-
-    return render_template(
-        "auth.html",
-        mode="register",
-    )
 
 
 @app.route("/login", methods=["GET", "POST"])
