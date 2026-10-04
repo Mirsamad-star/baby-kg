@@ -102,6 +102,72 @@ PRODUCTS = [
 def db():
     connection = sqlite3.connect(DB)
     connection.row_factory = sqlite3.Row
+
+    connection.executescript("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            phone TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            created_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            category TEXT NOT NULL,
+            price INTEGER NOT NULL,
+            description TEXT,
+            image TEXT,
+            active INTEGER DEFAULT 1,
+            created_at TEXT,
+            views INTEGER DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS product_images (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER NOT NULL,
+            image TEXT,
+            sort_order INTEGER DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            customer_name TEXT,
+            phone TEXT,
+            address TEXT,
+            total INTEGER,
+            status TEXT DEFAULT 'Yangi',
+            created_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS order_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER,
+            product_id INTEGER,
+            qty INTEGER,
+            price INTEGER
+        );
+
+        CREATE TABLE IF NOT EXISTS reviews (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER,
+            user_id INTEGER,
+            rating INTEGER,
+            comment TEXT,
+            created_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS wishlist (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            product_id INTEGER,
+            UNIQUE(user_id, product_id)
+        );
+    """)
+
+    connection.commit()
     return connection
 
 
