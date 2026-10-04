@@ -27,3 +27,13 @@ Open `http://127.0.0.1:5000`
 - Wishlist ❤️ for logged-in customers
 - Customer order history
 - Dashboard statistics
+
+
+## Yangilangan versiya
+- Demo mahsulotlar avtomatik yaratilmaydi.
+- Mahsulotlar faqat admin paneldan qo‘shiladi.
+- Admin qo‘shgan/tahrirlagan/o‘chirgan ma’lumotlar SQLite bazaga yoziladi.
+- Mahsulot sahifasida 1–5 yulduz va kommentariya mavjud.
+- Mahsulot cardlarida o‘rtacha reyting va fikrlar soni ko‘rsatiladi.
+- Render Start Command: `gunicorn app:app`
+- Render uchun ma'lumotlar deploylar orasida ham saqlanishi kerak bo‘lsa, Render Persistent Disk (`/var/data`) ulang.

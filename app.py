@@ -39,64 +39,7 @@ CATEGORIES = [
 ]
 
 
-PRODUCTS = [
-    (
-        "Qishki premium kurtka",
-        "Kurtka",
-        389000,
-        "Suv o‘tkazmaydigan, issiq va yengil premium kurtka. Yumshoq ichki qatlam, kundalik va sayohat uchun ideal.",
-        "https://images.unsplash.com/photo-1544966503-7cc5ac882d5f?auto=format&fit=crop&w=900&q=85",
-    ),
-    (
-        "Classic qora shim",
-        "Shim",
-        229000,
-        "Kundalik va bayram uchun zamonaviy model. Qulay fason va sifatli mato.",
-        "https://images.unsplash.com/photo-1506629905607-d9f297d3f4a8?auto=format&fit=crop&w=900&q=85",
-    ),
-    (
-        "Comfort krossovka",
-        "Oyoq kiyim",
-        299000,
-        "Yumshoq taglik, yengil material va qulay kundalik krossovka.",
-        "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=85",
-    ),
-    (
-        "Soft mini ko‘ylak",
-        "Ko‘ylak",
-        279000,
-        "Nozik mato, chiroyli fason va kundalik kiyishga mos.",
-        "https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?auto=format&fit=crop&w=900&q=85",
-    ),
-    (
-        "Urban hoodie",
-        "Ko‘ylak",
-        249000,
-        "Oversize uslubdagi yumshoq hoodie.",
-        "https://images.unsplash.com/photo-1551488831-00ddcb6c6bd3?auto=format&fit=crop&w=900&q=85",
-    ),
-    (
-        "Kichik sumka",
-        "Aksessuar",
-        159000,
-        "Har kun uchun ixcham va zamonaviy sumka.",
-        "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&w=900&q=85",
-    ),
-    (
-        "Sport kostyum",
-        "Shim",
-        349000,
-        "Yumshoq sport komplekti, faol kunlar uchun.",
-        "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=900&q=85",
-    ),
-    (
-        "Warm boots",
-        "Oyoq kiyim",
-        429000,
-        "Qishki issiq etik, mustahkam taglik va qulay ichki qism.",
-        "https://images.unsplash.com/photo-1520639888713-7851133b1ed0?auto=format&fit=crop&w=900&q=85",
-    ),
-]
+PRODUCTS = []
 
 
 def db():
@@ -257,45 +200,8 @@ def init_db():
             "ALTER TABLE products ADD COLUMN views INTEGER DEFAULT 0"
         )
 
-    # Demo mahsulotlarni faqat database bo'sh bo'lsa qo'shamiz
-    product_count = c.execute(
-        "SELECT COUNT(*) AS count FROM products"
-    ).fetchone()["count"]
-
-    if product_count == 0:
-        now = datetime.now().isoformat()
-
-        rows = [
-            (
-                name,
-                category,
-                price,
-                description,
-                image,
-                1,
-                now,
-                0,
-            )
-            for name, category, price, description, image in PRODUCTS
-        ]
-
-        c.executemany(
-            """
-            INSERT INTO products
-            (
-                name,
-                category,
-                price,
-                description,
-                image,
-                active,
-                created_at,
-                views
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            rows,
-        )
+    # Demo mahsulotlar avtomatik qo'shilmaydi.
+    # Mahsulotlarni faqat admin panel orqali qo'shish mumkin.
 
     # Product gallery
     existing_products = c.execute(
@@ -404,10 +310,15 @@ def home():
 
     products = c.execute(
         """
-        SELECT *
-        FROM products
-        WHERE active = 1
-        ORDER BY id DESC
+        SELECT
+            p.*,
+            COALESCE(ROUND(AVG(r.rating), 1), 0) AS avg_rating,
+            COUNT(r.id) AS review_count
+        FROM products p
+        LEFT JOIN reviews r ON r.product_id = p.id
+        WHERE p.active = 1
+        GROUP BY p.id
+        ORDER BY p.id DESC
         """
     ).fetchall()
 
@@ -452,9 +363,13 @@ def shop():
     c = db()
 
     sql = """
-        SELECT *
-        FROM products
-        WHERE active = 1
+        SELECT
+            p.*,
+            COALESCE(ROUND(AVG(r.rating), 1), 0) AS avg_rating,
+            COUNT(r.id) AS review_count
+        FROM products p
+        LEFT JOIN reviews r ON r.product_id = p.id
+        WHERE p.active = 1
     """
 
     args = []
@@ -478,12 +393,16 @@ def shop():
         sql += " AND category = ?"
         args.append(category)
 
+    sql += """
+        GROUP BY p.id
+    """
+
     sql += {
-        "price_low": " ORDER BY price ASC",
-        "price_high": " ORDER BY price DESC",
+        "price_low": " ORDER BY p.price ASC",
+        "price_high": " ORDER BY p.price DESC",
     }.get(
         sort,
-        " ORDER BY id DESC",
+        " ORDER BY p.id DESC",
     )
 
     products = c.execute(
@@ -752,6 +671,19 @@ def review(pid):
         )
 
     c = db()
+
+    product_exists = c.execute(
+        """
+        SELECT id FROM products
+        WHERE id = ? AND active = 1
+        """,
+        (pid,),
+    ).fetchone()
+
+    if not product_exists:
+        c.close()
+        flash("Mahsulot topilmadi.", "error")
+        return redirect(url_for("shop"))
 
     c.execute(
         """
