@@ -4,12 +4,19 @@ import sqlite3
 import os
 import uuid
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
 
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "baby-kg-modern-secret")
+app.secret_key = os.environ.get("SECRET_KEY", "baby-kg-modern-secret-2026")
+
+# Session sozlamalari — refresh qilganda chiqib ketmasligi uchun
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_PATH"] = "/"
+app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 
@@ -514,10 +521,77 @@ def product(pid):
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
-    # Akkaunt yaratish o'chirilgan
-    flash("Akkaunt yaratish hozircha yopiq.", "error")
-    return redirect(url_for("login"))
+    if request.method == "POST":
+        form = request.form
 
+        name = form.get("name", "").strip()
+        phone = form.get("phone", "").strip()
+        password = form.get("password", "")
+
+        if not name or not phone or not password:
+            flash(
+                "Barcha maydonlarni to‘ldiring.",
+                "error",
+            )
+        else:
+            c = db()
+
+            try:
+                c.execute(
+                    """
+                    INSERT INTO users
+                    (
+                        name,
+                        phone,
+                        password,
+                        created_at
+                    )
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (
+                        name,
+                        phone,
+                        password,
+                        datetime.now().isoformat(),
+                    ),
+                )
+
+                c.commit()
+
+                row = c.execute(
+                    """
+                    SELECT id, name, phone
+                    FROM users
+                    WHERE phone = ?
+                    """,
+                    (phone,),
+                ).fetchone()
+
+                session.permanent = True
+                session["user"] = dict(row)
+                session.pop("admin", None)  # mijoz kirganda admin sessiyasini tozalash
+                session.modified = True
+
+                flash(
+                    "Xush kelibsiz!",
+                    "success",
+                )
+
+                return redirect(url_for("home"))
+
+            except sqlite3.IntegrityError:
+                flash(
+                    "Bu telefon raqami allaqachon mavjud.",
+                    "error",
+                )
+
+            finally:
+                c.close()
+
+    return render_template(
+        "auth.html",
+        mode="register",
+    )
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -541,7 +615,10 @@ def login():
         c.close()
 
         if row:
+            session.permanent = True
             session["user"] = dict(row)
+            session.pop("admin", None)  # mijoz kirganda admin sessiyasini tozalash
+            session.modified = True
 
             flash(
                 "Xush kelibsiz!",
@@ -801,15 +878,10 @@ def add_cart(pid):
     if not exists:
         return jsonify(ok=False)
 
-    cart = session.setdefault(
-        "cart",
-        {},
-    )
-
+    cart = dict(session.get("cart") or {})
     key = str(pid)
-
-    cart[key] = cart.get(key, 0) + 1
-
+    cart[key] = int(cart.get(key, 0)) + 1
+    session["cart"] = cart
     session.modified = True
 
     return jsonify(
@@ -820,43 +892,71 @@ def add_cart(pid):
 
 @app.post("/cart/remove/<int:pid>")
 def remove_cart(pid):
-    cart = session.get(
-        "cart",
-        {},
-    )
-
-    cart.pop(
-        str(pid),
-        None,
-    )
-
+    cart = dict(session.get("cart") or {})
+    cart.pop(str(pid), None)
+    session["cart"] = cart
     session.modified = True
 
-    return redirect(
-        url_for("cart")
-    )
+    # AJAX so'rov bo'lsa JSON qaytar
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest" or request.is_json:
+        return jsonify(ok=True, count=sum(cart.values()))
+
+    return redirect(url_for("cart"))
 
 
 @app.post("/cart/update")
 def update_cart():
-    cart = session.get(
-        "cart",
-        {},
-    )
+    """Form orqali barcha miqdorlarni yangilash."""
+    old = dict(session.get("cart") or {})
+    cart = dict(old)
 
     for key, value in request.form.items():
+        key = str(key).strip()
+        if not key.isdigit():
+            continue
         try:
-            cart[key] = max(
-                1,
-                min(20, int(value)),
-            )
+            qty = int(value)
         except (ValueError, TypeError):
-            pass
+            continue
+        if qty < 1:
+            cart.pop(key, None)
+        else:
+            cart[key] = max(1, min(20, qty))
 
+    session["cart"] = cart
+    session.modified = True
+    return redirect(url_for("cart"))
+
+
+@app.post("/cart/qty/<int:pid>")
+def cart_qty(pid):
+    """Bitta mahsulot miqdorini + yoki - qilish (AJAX)."""
+    delta = request.form.get("delta") or (request.json or {}).get("delta") or 0
+    try:
+        delta = int(delta)
+    except (ValueError, TypeError):
+        delta = 0
+
+    cart = dict(session.get("cart") or {})
+    key = str(pid)
+    current = int(cart.get(key, 0))
+    new_qty = current + delta
+
+    if new_qty < 1:
+        cart.pop(key, None)
+        new_qty = 0
+    else:
+        cart[key] = max(1, min(20, new_qty))
+        new_qty = cart[key]
+
+    session["cart"] = cart
     session.modified = True
 
-    return redirect(
-        url_for("cart")
+    return jsonify(
+        ok=True,
+        qty=new_qty,
+        count=sum(cart.values()),
+        removed=(new_qty == 0),
     )
 
 
@@ -1020,6 +1120,7 @@ def order():
     c.close()
 
     session["cart"] = {}
+    session.modified = True
 
     flash(
         f"Buyurtma #{order_id} qabul qilindi!",
@@ -1056,45 +1157,35 @@ def orders():
 
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
+    # Agar allaqachon admin bo'lsa — to'g'ridan-to'g'ri panelga
+    if session.get("admin"):
+        return redirect(url_for("admin"))
+
     if request.method == "POST":
-
-        username = request.form.get(
-            "username",
-            "",
-        )
-
-        password = request.form.get(
-            "password",
-            "",
-        )
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
 
         if username == "Gulnoz" and password == "234":
+            session.permanent = True
             session["admin"] = True
+            session.pop("user", None)  # admin kirganda mijoz sessiyasini tozalash
+            session.modified = True
 
-            return redirect(
-                url_for("admin")
-            )
+            return redirect(url_for("admin"))
 
         flash(
             "Admin login yoki parol noto‘g‘ri.",
             "error",
         )
 
-    return render_template(
-        "admin_login.html"
-    )
+    return render_template("admin_login.html")
 
 
 @app.route("/admin/logout")
 def admin_logout():
-    session.pop(
-        "admin",
-        None,
-    )
-
-    return redirect(
-        url_for("home")
-    )
+    session.pop("admin", None)
+    session.modified = True
+    return redirect(url_for("home"))
 
 
 @app.route("/admin")

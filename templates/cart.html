@@ -11,21 +11,21 @@
     {% if items %}
     <form method="post" action="{{url_for('update_cart')}}" id="cart-form">
         <div class="cart-layout">
-            <div>
+            <div id="cart-items">
                 {% for x in items %}
-                <div class="cart-item" data-id="{{x.p.id}}">
-                    <img src="{{x.p.image}}" alt="{{x.p.name}}">
+                <div class="cart-item" data-id="{{x.p.id}}" id="item-{{x.p.id}}">
+                    <img src="{{x.p.image or ''}}" alt="{{x.p.name}}">
                     <div>
                         <small>{{x.p.category}}</small>
                         <h3>{{x.p.name}}</h3>
                         <b>{{'{:,}'.format(x.p.price).replace(',',' ')}} so‘m</b>
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <button type="button" class="qty-btn minus" onclick="updateQty({{x.p.id}}, -1)">-</button>
-                        <input type="number" name="{{x.p.id}}" min="1" max="20" value="{{x.qty}}" class="qty-input" onchange="this.form.submit()">
-                        <button type="button" class="qty-btn plus" onclick="updateQty({{x.p.id}}, 1)">+</button>
+                        <button type="button" class="qty-btn minus" data-pid="{{x.p.id}}" data-delta="-1">−</button>
+                        <input type="number" name="{{x.p.id}}" min="1" max="20" value="{{x.qty}}" class="qty-input" data-pid="{{x.p.id}}" readonly>
+                        <button type="button" class="qty-btn plus" data-pid="{{x.p.id}}" data-delta="1">+</button>
                     </div>
-                    <a class="remove" href="#" onclick="event.preventDefault();document.getElementById('rm{{x.p.id}}').submit()">×</a>
+                    <button type="button" class="remove" data-remove="{{x.p.id}}" title="O‘chirish">×</button>
                 </div>
                 {% endfor %}
             </div>
@@ -33,31 +33,98 @@
                 <h2>Jami</h2>
                 <div class="sum">
                     <span>Mahsulotlar</span>
-                    <b>{{'{:,}'.format(total).replace(',',' ')}} so‘m</b>
+                    <b id="cart-total">{{'{:,}'.format(total).replace(',',' ')}} so‘m</b>
                 </div>
                 <button class="btn big" type="submit">Yangilash</button>
                 <a class="btn dark big" href="{{url_for('checkout')}}">Buyurtma berish →</a>
             </aside>
         </div>
     </form>
-    
-    {% for x in items %}
-    <form id="rm{{x.p.id}}" method="post" action="{{url_for('remove_cart',pid=x.p.id)}}" style="display:none;"></form>
-    {% endfor %}
 
     <script>
-    function updateQty(pid, change) {
-        const input = document.querySelector(`input[name="${pid}"]`);
-        if (input) {
-            let val = parseInt(input.value) + change;
-            if (val < 1) val = 1;
-            if (val > 20) val = 20;
-            input.value = val;
-            document.getElementById('cart-form').submit();
+    (function() {
+        function updateBadge(count) {
+            document.querySelectorAll('.cart-count, .nav-actions em').forEach(function(el) {
+                el.textContent = count;
+            });
         }
-    }
+
+        function changeQty(pid, delta) {
+            var formData = new FormData();
+            formData.append('delta', delta);
+
+            fetch('/cart/qty/' + pid, {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (!d.ok) return;
+                updateBadge(d.count);
+
+                if (d.removed) {
+                    var el = document.getElementById('item-' + pid);
+                    if (el) el.remove();
+                    if (!document.querySelectorAll('.cart-item').length) {
+                        location.reload();
+                    } else {
+                        // Jami ni qayta hisoblash uchun sahifani yangilash
+                        location.reload();
+                    }
+                    return;
+                }
+
+                var input = document.querySelector('input.qty-input[data-pid="' + pid + '"]');
+                if (input) input.value = d.qty;
+
+                // Jami yangilash uchun sahifani yangilash (narxlar serverdan)
+                location.reload();
+            })
+            .catch(function() {
+                // Xato bo'lsa oddiy form submit
+                var input = document.querySelector('input.qty-input[data-pid="' + pid + '"]');
+                if (input) {
+                    var v = parseInt(input.value || '1', 10) + delta;
+                    if (v < 1) v = 1;
+                    if (v > 20) v = 20;
+                    input.value = v;
+                    document.getElementById('cart-form').submit();
+                }
+            });
+        }
+
+        document.querySelectorAll('.qty-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                var pid = btn.getAttribute('data-pid');
+                var delta = parseInt(btn.getAttribute('data-delta'), 10);
+                changeQty(pid, delta);
+            });
+        });
+
+        document.querySelectorAll('[data-remove]').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                var pid = btn.getAttribute('data-remove');
+                fetch('/cart/remove/' + pid, {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (d.ok) location.reload();
+                })
+                .catch(function() {
+                    location.href = '/cart';
+                });
+            });
+        });
+    })();
     </script>
-    
+
     {% else %}
     <div class="empty">
         <h2>Savatingiz bo‘sh</h2>
